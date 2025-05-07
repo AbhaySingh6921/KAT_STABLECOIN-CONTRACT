@@ -18,9 +18,12 @@ contract DeployKAT is Script {
 
         TokenAddresses=[weth,wbit];
         PriceFeedAddresses=[wethUsdPriceFeed,wbitUsdPriceFeed];
-        vm.startBroadcast();
+        vm.startBroadcast(DeployerKey);
+         // ✅ Deploy stablecoin
         DecentralizedStableCoin kat = new DecentralizedStableCoin();
+         // ✅ Deploy engine with allowed tokens and feeds
         KATEngine engine = new KATEngine(TokenAddresses, PriceFeedAddresses, address(kat));
+         //Transfer stablecoin ownership to engine
         kat.transferOwnership(address(engine));//by default ower of this is goes to caller of this funcrion so we transfer the owenrship to engine
         vm.stopBroadcast();   
         return (kat,engine,config);

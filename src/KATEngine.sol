@@ -102,7 +102,8 @@ contract KATEngine is ReentrancyGuard {
  * @param tokenCollateralAddress: The ERC20 token address of the collateral you're depositing
  * @param amountCollateral: The amount of collateral you're depositing
  */
-    function DepositCollateral(address TokenCollateralAddress,uint256 AmountCollateral) public MoreThenZero(AmountCollateral) IsAllowedToken(TokenCollateralAddress) nonReentrant(){
+    function 
+    DepositCollateral(address TokenCollateralAddress, uint256 AmountCollateral) public MoreThenZero(AmountCollateral) IsAllowedToken(TokenCollateralAddress) nonReentrant(){
         s_CollateralDeposited[msg.sender][TokenCollateralAddress] += AmountCollateral;
         //if changing of balance happen so we use the events to take the data
         emit CollateralDeposited(msg.sender, TokenCollateralAddress, AmountCollateral);
@@ -121,13 +122,13 @@ contract KATEngine is ReentrancyGuard {
  * @param amountDscToBurn: amount of DSC to burn
  * This function burns DSC and redeems underlying collateral in one transaction
  */
-function RedeemCollateralForDsc(address TokenCollateralAddress, uint256 AmountCollateral, uint256 AmountKATToBurn) external {
+function RedeemCollateralForKAT(address TokenCollateralAddress, uint256 AmountCollateral, uint256 AmountKATToBurn) external {
     _BurnKAT(AmountKATToBurn, msg.sender, msg.sender);
     RedeemCollateral(TokenCollateralAddress, AmountCollateral, msg.sender, msg.sender);
 }
     //The user would first need to burn their `DSC` to release their collateral
 
-    function RedeemCollateral(address TokenCollateralAddress,uint256 AmountCollateral,address from ,address to) internal MoreThenZero(AmountCollateral) nonReentrant{
+    function RedeemCollateral(address TokenCollateralAddress,uint256 AmountCollateral,address from ,address to) public MoreThenZero(AmountCollateral) nonReentrant{
         s_CollateralDeposited[from][TokenCollateralAddress]-=AmountCollateral;
         emit CollateralRedeemed(from ,to, TokenCollateralAddress, AmountCollateral);
         bool success = IERC20(TokenCollateralAddress).transfer(to, AmountCollateral);
@@ -184,11 +185,9 @@ function RedeemCollateralForDsc(address TokenCollateralAddress, uint256 AmountCo
     return (0.75)
     */
 
-    function _HealthFactor(address User) private view returns(uint256){
-        (uint256 TotalKATMinted, uint256 CollateralValueInUsd) = _GetAccountInformation(User);
-        uint256 collateralAdjustedForThreshold = (CollateralValueInUsd * LIQUIDATION_THRESHOLD) / LIQUIDATION_PRECISION;
-
-        return (collateralAdjustedForThreshold * PRECISION) / TotalKATMinted;
+   function _HealthFactor(address user) private view returns (uint256) {
+        (uint256 totalDscMinted, uint256 collateralValueInUsd) = _GetAccountInformation(user);
+        return _calculateHealthFactor(totalDscMinted, collateralValueInUsd);
     }
     //if the health factor is less than 1 then the user is in liquidation
     function _RevertIfHealthFactorIsBroken(address User) internal view {
@@ -197,7 +196,7 @@ function RedeemCollateralForDsc(address TokenCollateralAddress, uint256 AmountCo
             revert KATEngine_HealthFactorIsBroken(healthFactor);
         }
     }
-    function _GetAccountInformation(address User) private view returns(uint256 TotalKATMinted,uint256 CollateralValueInUsd){
+    function _GetAccountInformation(address User) public view returns(uint256 TotalKATMinted,uint256 CollateralValueInUsd) {
         TotalKATMinted = s_KATMinted[User];
         CollateralValueInUsd = GetAccountCollateralValue(User);
     }
@@ -214,6 +213,18 @@ function RedeemCollateralForDsc(address TokenCollateralAddress, uint256 AmountCo
         (,int256 price,,,) = priceFeed.latestRoundData();
           return ((uint256(price) * ADDITIONAL_FEED_PRECISION) * Amount) / PRECISION;
     }
+    function _calculateHealthFactor(
+        uint256 totalKATMinted,
+        uint256 collateralValueInUsd
+    )
+        internal
+        pure
+        returns (uint256)
+    {
+        if (totalKATMinted == 0) return type(uint256).max;
+        uint256 collateralAdjustedForThreshold = (collateralValueInUsd * LIQUIDATION_THRESHOLD) / LIQUIDATION_PRECISION;
+        return (collateralAdjustedForThreshold * PRECISION) / totalKATMinted;
+    }
 
                 ////////////////////////////// ////
                 /////end of mintKat function///////// 
@@ -225,7 +236,7 @@ function RedeemCollateralForDsc(address TokenCollateralAddress, uint256 AmountCo
                revert KATEngine_HealthFactorOk();
             }
         //This line calculates how much of the collateral token the liquidator should receive in exchange for covering the user's debt.
-         uint256 TokenAmountFromDebtCovered = _GetTokenAmountFromUsd(Collateral, DebtToCover);
+         uint256 TokenAmountFromDebtCovered = getTokenAmountFromUsd(Collateral, DebtToCover);
         //Liquidators get a reward for liquidating — like 5% bonus.
          uint256 BonusCollateral = (TokenAmountFromDebtCovered * LIQUIDATION_BONUS) / LIQUIDATION_PRECISION;
          //This is the final amount of collateral the liquidator will receive.
@@ -245,12 +256,59 @@ function RedeemCollateralForDsc(address TokenCollateralAddress, uint256 AmountCo
 //   Public & liquidator Functions   //
 //////////////////////////////////////////
 
-function _GetTokenAmountFromUsd(address Token, uint256 UsdAmountInWei) public view returns (uint256) {
+function getTokenAmountFromUsd(address Token, uint256 UsdAmountInWei) public view returns (uint256) {
     AggregatorV3Interface priceFeed = AggregatorV3Interface(s_PriceFeeds[Token]);
     (, int256 price,,,) = priceFeed.latestRoundData();
     //Converts USD amount to token amount using the price feed.
     return (UsdAmountInWei * PRECISION) / (uint256(price) * ADDITIONAL_FEED_PRECISION);
 }
 
-    function GetHealthFactor() external view {}
+    function getPrecision() external pure returns (uint256) {
+        return PRECISION;
+    }
+    
+
+    function getAdditionalFeedPrecision() external pure returns (uint256) {
+        return ADDITIONAL_FEED_PRECISION;
+    }
+
+    function getLiquidationThreshold() external pure returns (uint256) {
+        return LIQUIDATION_THRESHOLD;
+    }
+
+    function getLiquidationBonus() external pure returns (uint256) {
+        return LIQUIDATION_BONUS;
+    }
+
+    function getLiquidationPrecision() external pure returns (uint256) {
+        return LIQUIDATION_PRECISION;
+    }
+
+    function getMinHealthFactor() external pure returns (uint256) {
+        return MIN_HEALTH_FACTOR;
+    }
+
+    function getCollateralTokens() external view returns (address[] memory) {
+        return s_CollateralTokens;
+    }
+
+    function getKAT() external view returns (address) {
+        return address(i_KAT);
+    }
+
+    function getCollateralTokenPriceFeed(address token) external view returns (address) {
+        return s_PriceFeeds[token];
+    }
+
+    function getHealthFactor(address user) external view returns (uint256) {
+        return _HealthFactor(user);
+    }
+
+     function getCollateralBalanceOfUser(address user, address token) external view returns (uint256) {
+        return s_CollateralDeposited[user][token];
+    }
+
+    
+
+
 }
