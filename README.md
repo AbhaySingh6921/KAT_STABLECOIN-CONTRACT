@@ -10,3 +10,14 @@
    1. wETH
    2. wBTC
 ```
+
+//to deploy
+forge script script/DeployKAT.s.sol \
+  --rpc-url $SEPOLIA_RPC_URL \
+  --private-key $PRIVATE_KEY \
+  --broadcast \
+  --verify \
+
+  
+  --gas-price 10 \
+  
